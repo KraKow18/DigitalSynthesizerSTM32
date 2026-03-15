@@ -62,18 +62,25 @@ enum waveform getUserWaveform(void);
 enum waveform getUserWaveform(void)
 {
     if (HAL_GPIO_ReadPin(GPIOD, bsinus_Pin))
-        return SINUS;
-
+    {
+    	return SINUS;
+    }
     else if (HAL_GPIO_ReadPin(GPIOD, btriangle_Pin))
-        return TRIANGLE;
-
+    {
+    	return TRIANGLE;
+    }
     else if (HAL_GPIO_ReadPin(GPIOD, bsaw_Pin))
-        return SAWTOOTH;
-
+    {
+    	return SAWTOOTH;
+    }
     else if (HAL_GPIO_ReadPin(GPIOD, bsquare_Pin))
-        return SQUARE;
-
-    return NONE;
+    {
+    	return SQUARE;
+    }
+    else
+    {
+    	return NONE;
+    }
 }
 
 /* USER CODE END 0 */
@@ -222,10 +229,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  /*Configure GPIO pins : bLowerOctave_Pin bUpperOctave_Pin bsinus_Pin btriangle_Pin
-                           bsaw_Pin bsquare_Pin */
-  GPIO_InitStruct.Pin = bLowerOctave_Pin|bUpperOctave_Pin|bsinus_Pin|btriangle_Pin
-                          |bsaw_Pin|bsquare_Pin;
+  /*Configure GPIO pins : bLowerOctave_Pin bUpperOctave_Pin bsquare_Pin bsinus_Pin
+                           btriangle_Pin bsaw_Pin */
+  GPIO_InitStruct.Pin = bLowerOctave_Pin|bUpperOctave_Pin|bsquare_Pin|bsinus_Pin
+                          |btriangle_Pin|bsaw_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);

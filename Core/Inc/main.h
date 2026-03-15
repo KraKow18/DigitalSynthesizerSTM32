@@ -61,14 +61,14 @@ void Error_Handler(void);
 #define bLowerOctave_GPIO_Port GPIOD
 #define bUpperOctave_Pin GPIO_PIN_12
 #define bUpperOctave_GPIO_Port GPIOD
+#define bsquare_Pin GPIO_PIN_0
+#define bsquare_GPIO_Port GPIOD
 #define bsinus_Pin GPIO_PIN_1
 #define bsinus_GPIO_Port GPIOD
 #define btriangle_Pin GPIO_PIN_2
 #define btriangle_GPIO_Port GPIOD
 #define bsaw_Pin GPIO_PIN_3
 #define bsaw_GPIO_Port GPIOD
-#define bsquare_Pin GPIO_PIN_4
-#define bsquare_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 
