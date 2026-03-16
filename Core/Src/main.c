@@ -12,6 +12,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <string.h>
+#include <stdio.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -21,7 +23,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DMA_BUFFER_SIZE 32
+#define SAMPLING_FREQUENCY 48000
+#define SAMPLE_NUMBER 512
+#define OUTPUT_MIDPOINT 2048 // for the sine, because DAC is 12 bits ==> 2^12 = 4096
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,7 +50,7 @@ UART_HandleTypeDef huart4;
 /* USER CODE BEGIN PV */
 
 static enum waveform lastWaveform = NONE;
-
+uint16_t lookup_table[SAMPLE_NUMBER];
 const char *waveformStr[] = {
     "NONE\r\n",
     "SINUS\r\n",
@@ -53,6 +58,9 @@ const char *waveformStr[] = {
     "SAW\r\n",
     "SQUARE\r\n"
 };
+static uint16_t sample_index = 0;
+static uint32_t wavetable_index = 0;
+uint16_t dma_buffer[2 * DMA_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
 
 /* USER CODE END PV */
 
@@ -73,6 +81,12 @@ enum waveform getUserWaveform(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+int __io_putchar(int ch)
+{
+	HAL_UART_Transmit(&huart4, (uint8_t*) &ch, 1, HAL_MAX_DELAY);
+	return ch;
+}
 
 enum waveform getUserWaveform(void)
 {
@@ -98,6 +112,33 @@ enum waveform getUserWaveform(void)
     }
 }
 
+void feedDMABuffer(uint16_t *buffer){
+	for(int i = 0; i < DMA_BUFFER_SIZE; i++){
+		buffer[i] = lookup_table[wavetable_index];
+
+        wavetable_index++;
+        if(wavetable_index >= SAMPLE_NUMBER){
+            wavetable_index = 0;
+        }
+
+		sample_index++;
+		if(sample_index <= 512){
+			printf("%d,\r\n", buffer[i]);
+		}
+		else if(sample_index == (512+1)){
+			printf("########################################\r\n");
+		}
+	}
+}
+
+void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac){
+	feedDMABuffer(&dma_buffer[DMA_BUFFER_SIZE]);
+}
+
+void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac){
+	feedDMABuffer(&dma_buffer[0]);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -109,6 +150,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   enum waveform selectedWaveform;
+  uint16_t value_of_the_sinus;
 
   /* USER CODE END 1 */
 
@@ -135,6 +177,15 @@ int main(void)
   MX_I2S3_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start(&htim6);
+  HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*) &dma_buffer, 2*DMA_BUFFER_SIZE, DAC_ALIGN_12B_R);
+
+  // generate a lookup table for a sinus
+  for(int i = 0; i < SAMPLE_NUMBER; i++){
+  	  value_of_the_sinus = (uint16_t) rint((sinf(((2*M_PI)/SAMPLE_NUMBER)*i)+1)*(4095/2));
+  	  lookup_table[i] = value_of_the_sinus < 4096 ? value_of_the_sinus : 4095;
+    }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -145,7 +196,7 @@ int main(void)
     if (selectedWaveform != lastWaveform && selectedWaveform != NONE)
     {
         lastWaveform = selectedWaveform;
-        HAL_UART_Transmit(&huart4, (uint8_t*) waveformStr[selectedWaveform], strlen(waveformStr[selectedWaveform]), 10);
+        //HAL_UART_Transmit(&huart4, (uint8_t*) waveformStr[selectedWaveform], strlen(waveformStr[selectedWaveform]), 10);
     }
   }
     /* USER CODE END WHILE */
