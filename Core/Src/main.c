@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include "MY_CS43L22.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -25,8 +26,8 @@
 /* USER CODE BEGIN PD */
 #define DMA_BUFFER_SIZE 32
 #define SAMPLING_FREQUENCY 48000
-#define SAMPLE_NUMBER 512
-#define OUTPUT_MIDPOINT 2048 // for the sine, because DAC is 12 bits ==> 2^12 = 4096
+#define SAMPLE_NUMBER_LUT 512
+#define AMPLITUDE 2048 // for the sine, because DAC is 12 bits ==> 2^12 = 4096
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -35,22 +36,17 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-DAC_HandleTypeDef hdac;
-DMA_HandleTypeDef hdma_dac1;
-
 I2C_HandleTypeDef hi2c1;
 
 I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
-
-TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 
 static enum waveform lastWaveform = NONE;
-uint16_t lookup_table[SAMPLE_NUMBER];
+uint16_t lookup_table[SAMPLE_NUMBER_LUT];
 const char *waveformStr[] = {
     "NONE\r\n",
     "SINUS\r\n",
@@ -69,10 +65,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_UART4_Init(void);
-static void MX_DAC_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
-static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 
 enum waveform getUserWaveform(void);
@@ -117,7 +111,7 @@ void feedDMABuffer(uint16_t *buffer){
 		buffer[i] = lookup_table[wavetable_index];
 
         wavetable_index++;
-        if(wavetable_index >= SAMPLE_NUMBER){
+        if(wavetable_index >= SAMPLE_NUMBER_LUT){
             wavetable_index = 0;
         }
 
@@ -131,11 +125,11 @@ void feedDMABuffer(uint16_t *buffer){
 	}
 }
 
-void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac){
+void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
 	feedDMABuffer(&dma_buffer[DMA_BUFFER_SIZE]);
 }
 
-void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac){
+void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s){
 	feedDMABuffer(&dma_buffer[0]);
 }
 
@@ -172,17 +166,13 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_UART4_Init();
-  MX_DAC_Init();
   MX_I2C1_Init();
   MX_I2S3_Init();
-  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start(&htim6);
-  HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*) &dma_buffer, 2*DMA_BUFFER_SIZE, DAC_ALIGN_12B_R);
 
   // generate a lookup table for a sinus
-  for(int i = 0; i < SAMPLE_NUMBER; i++){
-  	  value_of_the_sinus = (uint16_t) rint((sinf(((2*M_PI)/SAMPLE_NUMBER)*i)+1)*(4095/2));
+  for(int i = 0; i < SAMPLE_NUMBER_LUT; i++){
+  	  value_of_the_sinus = (uint16_t) rint((sinf(((2*M_PI)/SAMPLE_NUMBER_LUT)*i)+1)*AMPLITUDE);
   	  lookup_table[i] = value_of_the_sinus < 4096 ? value_of_the_sinus : 4095;
     }
 
@@ -196,7 +186,7 @@ int main(void)
     if (selectedWaveform != lastWaveform && selectedWaveform != NONE)
     {
         lastWaveform = selectedWaveform;
-        //HAL_UART_Transmit(&huart4, (uint8_t*) waveformStr[selectedWaveform], strlen(waveformStr[selectedWaveform]), 10);
+        HAL_UART_Transmit(&huart4, (uint8_t*) waveformStr[selectedWaveform], strlen(waveformStr[selectedWaveform]), 10);
     }
   }
     /* USER CODE END WHILE */
@@ -252,46 +242,6 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief DAC Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DAC_Init(void)
-{
-
-  /* USER CODE BEGIN DAC_Init 0 */
-
-  /* USER CODE END DAC_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC_Init 1 */
-
-  /* USER CODE END DAC_Init 1 */
-
-  /** DAC Initialization
-  */
-  hdac.Instance = DAC;
-  if (HAL_DAC_Init(&hdac) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_Trigger = DAC_TRIGGER_T6_TRGO;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  if (HAL_DAC_ConfigChannel(&hdac, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC_Init 2 */
-
-  /* USER CODE END DAC_Init 2 */
-
-}
-
-/**
   * @brief I2C1 Initialization Function
   * @param None
   * @retval None
@@ -344,7 +294,7 @@ static void MX_I2S3_Init(void)
   hi2s3.Init.Mode = I2S_MODE_MASTER_TX;
   hi2s3.Init.Standard = I2S_STANDARD_PHILIPS;
   hi2s3.Init.DataFormat = I2S_DATAFORMAT_16B;
-  hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
+  hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
   hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s3.Init.CPOL = I2S_CPOL_LOW;
   hi2s3.Init.ClockSource = I2S_CLOCK_PLL;
@@ -356,44 +306,6 @@ static void MX_I2S3_Init(void)
   /* USER CODE BEGIN I2S3_Init 2 */
 
   /* USER CODE END I2S3_Init 2 */
-
-}
-
-/**
-  * @brief TIM6 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM6_Init(void)
-{
-
-  /* USER CODE BEGIN TIM6_Init 0 */
-
-  /* USER CODE END TIM6_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM6_Init 1 */
-
-  /* USER CODE END TIM6_Init 1 */
-  htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 84-1;
-  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 21-1;
-  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM6_Init 2 */
-
-  /* USER CODE END TIM6_Init 2 */
 
 }
 
@@ -440,9 +352,6 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
   /* DMA1_Stream7_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
@@ -469,6 +378,12 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : bLowerOctave_Pin bUpperOctave_Pin bsquare_Pin bsinus_Pin
                            btriangle_Pin bsaw_Pin */
