@@ -24,9 +24,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DMA_BUFFER_SIZE 32
-#define SAMPLING_FREQUENCY 48000
-#define SAMPLE_NUMBER_LUT 512
+#define DMA_BUFFER_SIZE 64
+#define SAMPLE_NUMBER_LUT 4096
 #define AMPLITUDE 2048 // for the sine, because DAC is 12 bits ==> 2^12 = 4096
 /* USER CODE END PD */
 
@@ -57,6 +56,8 @@ const char *waveformStr[] = {
 static uint16_t sample_index = 0;
 static uint32_t wavetable_index = 0;
 uint16_t dma_buffer[2 * DMA_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
+float phase = 0.0f;
+float phase_increment = 5.0f;
 
 /* USER CODE END PV */
 
@@ -106,22 +107,42 @@ enum waveform getUserWaveform(void)
     }
 }
 
-void feedDMABuffer(uint16_t *buffer){
+//void feedDMABuffer(uint16_t *buffer){ // a modif pour avoir les deux canaux L/R
+//	for(int i = 0; i < DMA_BUFFER_SIZE; i++){
+//		buffer[i] = lookup_table[wavetable_index];
+//		wavetable_index++;
+//		if(wavetable_index >= SAMPLE_NUMBER_LUT){
+//			wavetable_index = 0;
+//		}
+//		sample_index++;
+//
+//		if(sample_index <= 512){
+//			printf("%d,\r\n", buffer[i]);
+//		} else if(sample_index == (512+1)){
+//			printf("########################################\r\n");
+//		}
+//
+//	}
+//}
+
+float computePhaseIncrement(float outFrequency, I2S_HandleTypeDef *hi2s){
+	return outFrequency/hi2s->Init.AudioFreq*pow(2, 32);
+}
+
+void feedDMABuffer(uint16_t *buffer){ // a modif pour avoir les deux canaux L/R
 	for(int i = 0; i < DMA_BUFFER_SIZE; i++){
-		buffer[i] = lookup_table[wavetable_index];
+		uint32_t idx = (uint32_t)phase;
+		int16_t out = ((int32_t)lookup_table[idx]-2048);
+		//int16_t out = 2048 * 1 * sinf(phase);//(int32_t)lookup_table[idx];
+		buffer[2*i] = out;
+		buffer[2*i+1] = out;
 
-        wavetable_index++;
-        if(wavetable_index >= SAMPLE_NUMBER_LUT){
-            wavetable_index = 0;
-        }
+        phase += phase_increment;
 
-		sample_index++;
-		if(sample_index <= 512){
-			printf("%d,\r\n", buffer[i]);
-		}
-		else if(sample_index == (512+1)){
-			printf("########################################\r\n");
-		}
+        //printf("%f\r\n", phase_increment);
+
+        if(phase >= SAMPLE_NUMBER_LUT)
+            phase -= SAMPLE_NUMBER_LUT;
 	}
 }
 
@@ -142,6 +163,9 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
+//sample_dt = F_OUT/F_SAMPLE;
+//sample_N = F_SAMPLE/F_OUT;
 
   enum waveform selectedWaveform;
   uint16_t value_of_the_sinus;
@@ -169,12 +193,21 @@ int main(void)
   MX_I2C1_Init();
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
+  CS43_Init(hi2c1, MODE_I2S);
+  CS43_SetVolume(1);
+  CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
+  CS43_Start();
 
   // generate a lookup table for a sinus
   for(int i = 0; i < SAMPLE_NUMBER_LUT; i++){
-  	  value_of_the_sinus = (uint16_t) rint((sinf(((2*M_PI)/SAMPLE_NUMBER_LUT)*i)+1)*AMPLITUDE);
-  	  lookup_table[i] = value_of_the_sinus < 4096 ? value_of_the_sinus : 4095;
+  	  value_of_the_sinus = (uint16_t) rint(AMPLITUDE*(sinf(((2*M_PI)/SAMPLE_NUMBER_LUT)*i)));
+  	  lookup_table[i] = value_of_the_sinus < AMPLITUDE ? value_of_the_sinus : AMPLITUDE-1;
     }
+
+  phase_increment = computePhaseIncrement(50, &hi2s3);
+
+  // start i2s par ici
+  HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dma_buffer, DMA_BUFFER_SIZE);
 
   /* USER CODE END 2 */
 
@@ -352,9 +385,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream7_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
+  /* DMA1_Stream5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
 
 }
 
@@ -378,12 +411,6 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PA4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : bLowerOctave_Pin bUpperOctave_Pin bsquare_Pin bsinus_Pin
                            btriangle_Pin bsaw_Pin */
