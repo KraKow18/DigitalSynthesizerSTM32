@@ -26,7 +26,7 @@
 /* USER CODE BEGIN PD */
 #define NUMBER_OF_FRAMES_PER_HALF 32  // 32 samples (left+right) for each camm
 #define TOTAL_BUFFER_SIZE (NUMBER_OF_FRAMES_PER_HALF * 2 * 2) // 32 frames * 2 (L/R) * 2 (halves) = 128 values
-#define SAMPLE_NUMBER_LUT 512 // can hear a small harmonic distortion for value < 4096 => something to improve
+#define SAMPLE_NUMBER_LUT 1024 // can hear a small harmonic distortion for value < 4096 => something to improve
 #define AMPLITUDE 16000
 #define PIPI 6.2831853
 /* USER CODE END PD */
@@ -110,11 +110,8 @@ float computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2s){
 
 void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){ // a modif pour avoir les deux canaux L/R
 	for(int i = 0; i < num_frames; i++){
-		uint32_t idx = (uint32_t)wavformPhase;
-		int16_t out = sinusLookupTable[idx];
-
-		buffer[2*i] = out;
-		buffer[2*i+1] = out;
+		buffer[2*i] = sinusLookupTable[(uint32_t)wavformPhase];
+		buffer[2*i+1] = sinusLookupTable[(uint32_t)wavformPhase];
 
         wavformPhase += waveformPhaseIncrement;
 
@@ -178,7 +175,6 @@ int main(void)
 
   // define a phase increment with a given frequency
   waveformPhaseIncrement = computePhaseIncrement(650, &hi2s3);
-
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
 
   /* USER CODE END 2 */
@@ -193,6 +189,10 @@ int main(void)
         lastWaveformChosenByUser = selectedWaveform;
         HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[selectedWaveform], strlen(waveformsAvailable[selectedWaveform]), 10);
     }
+
+//    if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
+//
+//    }
   }
     /* USER CODE END WHILE */
 
