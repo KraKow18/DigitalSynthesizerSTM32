@@ -45,6 +45,7 @@ UART_HandleTypeDef huart4;
 /* USER CODE BEGIN PV */
 float wavformPhase = 0.0f; // a check s il faut passer en uint16_t
 float waveformPhaseIncrement;
+float waveVolume = 0.0f;
 static enum waveform lastWaveformChosenByUser = NONE;
 int16_t sinusLookupTable[SAMPLE_NUMBER_LUT];
 int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
@@ -109,9 +110,26 @@ float computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2s){
 }
 
 void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){ // a modif pour avoir les deux canaux L/R
+	const float antipopFactor = 0.01f;
 	for(int i = 0; i < num_frames; i++){
-		buffer[2*i] = sinusLookupTable[(uint32_t)wavformPhase];
-		buffer[2*i+1] = sinusLookupTable[(uint32_t)wavformPhase];
+
+		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
+			if(waveVolume <= 1.0){
+				waveVolume += antipopFactor; // antipopFactor = 0.01
+			}
+			else if(waveVolume > 1.0){
+				waveVolume = 1.0;
+			}
+		}
+		else if(waveVolume > 0.0){
+			waveVolume -= antipopFactor;
+			if(waveVolume < 0.0){
+				waveVolume = 0.0;
+			}
+		}
+
+		buffer[2*i] = sinusLookupTable[(uint32_t)wavformPhase] * waveVolume;
+		buffer[2*i+1] = sinusLookupTable[(uint32_t)wavformPhase] * waveVolume;
 
         wavformPhase += waveformPhaseIncrement;
 
@@ -189,10 +207,6 @@ int main(void)
         lastWaveformChosenByUser = selectedWaveform;
         HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[selectedWaveform], strlen(waveformsAvailable[selectedWaveform]), 10);
     }
-
-//    if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
-//
-//    }
   }
     /* USER CODE END WHILE */
 
