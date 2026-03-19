@@ -24,11 +24,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define NUMBER_OF_FRAMES_PER_HALF 32  // 32 samples (left+right) for each camm
+#define NUMBER_OF_FRAMES_PER_HALF 32  // 32 samples (left+right) for each call
 #define TOTAL_BUFFER_SIZE (NUMBER_OF_FRAMES_PER_HALF * 2 * 2) // 32 frames * 2 (L/R) * 2 (halves) = 128 values
-#define SAMPLE_NUMBER_LUT 1024 // can hear a small harmonic distortion for value < 4096 => something to improve
-#define AMPLITUDE 16000
+#define WAVE_AMPLITUDE 16000
 #define PIPI 6.2831853
+#define LUT_BITS 10
+#define SAMPLE_NUMBER_LUT (1 << LUT_BITS) // can hear a small harmonic distortion for value < 4096 => something to improve
+#define FP_SHIFT_AMOUNT (32 - LUT_BITS)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -43,10 +45,10 @@ DMA_HandleTypeDef hdma_spi3_tx;
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
-float wavformPhase = 0.0f; // a check s il faut passer en uint16_t
-float waveformPhaseIncrement;
 float waveVolume = 0.0f;
 static enum waveform lastWaveformChosenByUser = NONE;
+uint32_t waveformPhase = 0;
+uint32_t waveformPhaseIncrement = 0;
 int16_t sinusLookupTable[SAMPLE_NUMBER_LUT];
 int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
 const char* waveformsAvailable[] = {
@@ -105,36 +107,33 @@ enum waveform getUserWaveform(void)
     }
 }
 
-float computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2s){
-	return (wantedWaveFrequency / hi2s->Init.AudioFreq) * SAMPLE_NUMBER_LUT;
+uint32_t computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2s){
+	return (uint32_t)(((double)wantedWaveFrequency / (double)hi2s->Init.AudioFreq) * 4294967296.0); // 4294967296.0 = 2^32
 }
 
-void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){ // a modif pour avoir les deux canaux L/R
-	const float antipopFactor = 0.01f;
+void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
+	const float antipopFactor = 0.001;
 	for(int i = 0; i < num_frames; i++){
 
 		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
 			if(waveVolume <= 1.0){
-				waveVolume += antipopFactor; // antipopFactor = 0.01
+				waveVolume += antipopFactor;
 			}
-			else if(waveVolume > 1.0){
+			else{
 				waveVolume = 1.0;
 			}
 		}
-		else if(waveVolume > 0.0){
-			waveVolume -= antipopFactor;
-			if(waveVolume < 0.0){
+		else{
+			if(waveVolume > 0.0){
+				waveVolume -= antipopFactor;
+			}
+			else{
 				waveVolume = 0.0;
 			}
 		}
-
-		buffer[2*i] = sinusLookupTable[(uint32_t)wavformPhase] * waveVolume;
-		buffer[2*i+1] = sinusLookupTable[(uint32_t)wavformPhase] * waveVolume;
-
-        wavformPhase += waveformPhaseIncrement;
-
-        if(wavformPhase >= SAMPLE_NUMBER_LUT)
-            wavformPhase -= SAMPLE_NUMBER_LUT;
+		buffer[2*i] = sinusLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+		buffer[2*i+1] = sinusLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+        waveformPhase += waveformPhaseIncrement;
 	}
 }
 
@@ -188,7 +187,7 @@ int main(void)
 
   // generate a lookup table for a sinus
   for(int i = 0; i < SAMPLE_NUMBER_LUT; i++){
-		  sinusLookupTable[i] = (int16_t)(AMPLITUDE * sin(i * PIPI / SAMPLE_NUMBER_LUT));
+		  sinusLookupTable[i] = (int16_t)(WAVE_AMPLITUDE * sin(i * PIPI / SAMPLE_NUMBER_LUT));
   }
 
   // define a phase increment with a given frequency
