@@ -24,9 +24,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DMA_BUFFER_SIZE 64
-#define SAMPLE_NUMBER_LUT 4096
-#define AMPLITUDE 2048 // for the sine, because DAC is 12 bits ==> 2^12 = 4096
+#define NUMBER_OF_FRAMES_PER_HALF 32  // 32 samples (left+right) for each camm
+#define TOTAL_BUFFER_SIZE (NUMBER_OF_FRAMES_PER_HALF * 2 * 2) // 32 frames * 2 (L/R) * 2 (halves) = 128 values
+#define SAMPLE_NUMBER_LUT 512 // can hear a small harmonic distortion for value < 4096 => something to improve
+#define AMPLITUDE 16000
+#define PIPI 6.2831853
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -36,29 +38,23 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
-
 I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
-
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
-
-static enum waveform lastWaveform = NONE;
-uint16_t lookup_table[SAMPLE_NUMBER_LUT];
-const char *waveformStr[] = {
+float wavformPhase = 0.0f; // a check s il faut passer en uint16_t
+float waveformPhaseIncrement;
+static enum waveform lastWaveformChosenByUser = NONE;
+int16_t sinusLookupTable[SAMPLE_NUMBER_LUT];
+int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
+const char* waveformsAvailable[] = {
     "NONE\r\n",
     "SINUS\r\n",
     "TRIANGLE\r\n",
     "SAW\r\n",
     "SQUARE\r\n"
 };
-static uint16_t sample_index = 0;
-static uint32_t wavetable_index = 0;
-uint16_t dma_buffer[2 * DMA_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
-float phase = 0.0f;
-float phase_increment = 5.0f;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,6 +73,7 @@ enum waveform getUserWaveform(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+// used for debugging to print values on pc console with uart
 int __io_putchar(int ch)
 {
 	HAL_UART_Transmit(&huart4, (uint8_t*) &ch, 1, HAL_MAX_DELAY);
@@ -107,51 +104,31 @@ enum waveform getUserWaveform(void)
     }
 }
 
-//void feedDMABuffer(uint16_t *buffer){ // a modif pour avoir les deux canaux L/R
-//	for(int i = 0; i < DMA_BUFFER_SIZE; i++){
-//		buffer[i] = lookup_table[wavetable_index];
-//		wavetable_index++;
-//		if(wavetable_index >= SAMPLE_NUMBER_LUT){
-//			wavetable_index = 0;
-//		}
-//		sample_index++;
-//
-//		if(sample_index <= 512){
-//			printf("%d,\r\n", buffer[i]);
-//		} else if(sample_index == (512+1)){
-//			printf("########################################\r\n");
-//		}
-//
-//	}
-//}
-
-float computePhaseIncrement(float outFrequency, I2S_HandleTypeDef *hi2s){
-	return outFrequency/hi2s->Init.AudioFreq*pow(2, 32);
+float computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2s){
+	return (wantedWaveFrequency / hi2s->Init.AudioFreq) * SAMPLE_NUMBER_LUT;
 }
 
-void feedDMABuffer(uint16_t *buffer){ // a modif pour avoir les deux canaux L/R
-	for(int i = 0; i < DMA_BUFFER_SIZE; i++){
-		uint32_t idx = (uint32_t)phase;
-		int16_t out = ((int32_t)lookup_table[idx]-2048);
-		//int16_t out = 2048 * 1 * sinf(phase);//(int32_t)lookup_table[idx];
+void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){ // a modif pour avoir les deux canaux L/R
+	for(int i = 0; i < num_frames; i++){
+		uint32_t idx = (uint32_t)wavformPhase;
+		int16_t out = sinusLookupTable[idx];
+
 		buffer[2*i] = out;
 		buffer[2*i+1] = out;
 
-        phase += phase_increment;
+        wavformPhase += waveformPhaseIncrement;
 
-        //printf("%f\r\n", phase_increment);
-
-        if(phase >= SAMPLE_NUMBER_LUT)
-            phase -= SAMPLE_NUMBER_LUT;
+        if(wavformPhase >= SAMPLE_NUMBER_LUT)
+            wavformPhase -= SAMPLE_NUMBER_LUT;
 	}
 }
 
-void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
-	feedDMABuffer(&dma_buffer[DMA_BUFFER_SIZE]);
+void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s){
+	feedDMAAudioBuffer(&dmaAudioBuffer[0], NUMBER_OF_FRAMES_PER_HALF);
 }
 
-void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s){
-	feedDMABuffer(&dma_buffer[0]);
+void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
+	feedDMAAudioBuffer(&dmaAudioBuffer[TOTAL_BUFFER_SIZE / 2], NUMBER_OF_FRAMES_PER_HALF);
 }
 
 /* USER CODE END 0 */
@@ -163,13 +140,7 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
-//sample_dt = F_OUT/F_SAMPLE;
-//sample_N = F_SAMPLE/F_OUT;
-
   enum waveform selectedWaveform;
-  uint16_t value_of_the_sinus;
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -193,21 +164,22 @@ int main(void)
   MX_I2C1_Init();
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
+
+  // Configure CS43 audio chip
   CS43_Init(hi2c1, MODE_I2S);
-  CS43_SetVolume(1);
+  CS43_SetVolume(3);
   CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
   CS43_Start();
 
   // generate a lookup table for a sinus
   for(int i = 0; i < SAMPLE_NUMBER_LUT; i++){
-  	  value_of_the_sinus = (uint16_t) rint(AMPLITUDE*(sinf(((2*M_PI)/SAMPLE_NUMBER_LUT)*i)));
-  	  lookup_table[i] = value_of_the_sinus < AMPLITUDE ? value_of_the_sinus : AMPLITUDE-1;
-    }
+		  sinusLookupTable[i] = (int16_t)(AMPLITUDE * sin(i * PIPI / SAMPLE_NUMBER_LUT));
+  }
 
-  phase_increment = computePhaseIncrement(50, &hi2s3);
+  // define a phase increment with a given frequency
+  waveformPhaseIncrement = computePhaseIncrement(650, &hi2s3);
 
-  // start i2s par ici
-  HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dma_buffer, DMA_BUFFER_SIZE);
+  HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
 
   /* USER CODE END 2 */
 
@@ -216,10 +188,10 @@ int main(void)
   while(1){
     selectedWaveform = getUserWaveform();
 
-    if (selectedWaveform != lastWaveform && selectedWaveform != NONE)
+    if (selectedWaveform != lastWaveformChosenByUser && selectedWaveform != NONE)
     {
-        lastWaveform = selectedWaveform;
-        HAL_UART_Transmit(&huart4, (uint8_t*) waveformStr[selectedWaveform], strlen(waveformStr[selectedWaveform]), 10);
+        lastWaveformChosenByUser = selectedWaveform;
+        HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[selectedWaveform], strlen(waveformsAvailable[selectedWaveform]), 10);
     }
   }
     /* USER CODE END WHILE */
