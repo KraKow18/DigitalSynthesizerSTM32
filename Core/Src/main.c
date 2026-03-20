@@ -163,6 +163,9 @@ int main(void)
   /* USER CODE BEGIN 1 */
   enum waveform selectedWaveform;
   float wantedWaveFrequency = 0.0;
+  const int32_t quarterOfTheWave = SAMPLE_NUMBER_LUT >> 2;
+  const int32_t halfOfTheWave    = SAMPLE_NUMBER_LUT >> 1;
+  const int32_t threeQuartersOfTheWave = quarterOfTheWave + halfOfTheWave;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -203,15 +206,15 @@ int main(void)
   // in each calculation, I have to do the multiplication first and then the division.
   // if I do the division first, the decimal part will be lost early (because we use integers) and the error will "snowball" with the multiplication.
   // This will lead to have bad values at the extremes points (or not really precise as we want).
-  for(uint16_t i = 0; i < 1024; i++){
-	  if (i < 256){
-		  triangleLookupTable[i] = (WAVE_AMPLITUDE * i)/256;
+  for(uint16_t i = 0; i < SAMPLE_NUMBER_LUT; i++){
+	  if (i < quarterOfTheWave){
+		  triangleLookupTable[i] = ((int32_t)WAVE_AMPLITUDE * i)/(SAMPLE_NUMBER_LUT >> 2);
 	  }
-	  else if(i < 768){
-		  triangleLookupTable[i] = -(WAVE_AMPLITUDE * (i-256))/256 + WAVE_AMPLITUDE;
+	  else if(i < threeQuartersOfTheWave){
+		  triangleLookupTable[i] = -((int32_t)WAVE_AMPLITUDE * (i - quarterOfTheWave) ) / quarterOfTheWave + (int32_t)WAVE_AMPLITUDE;
 	  }
 	  else{
-		  triangleLookupTable[i] = (WAVE_AMPLITUDE * (i-768))/256 - WAVE_AMPLITUDE;
+		  triangleLookupTable[i] = (int32_t)WAVE_AMPLITUDE * (i - threeQuartersOfTheWave) / quarterOfTheWave - (int32_t)WAVE_AMPLITUDE;
 	  }
   }
 
