@@ -146,9 +146,34 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
 	feedDMAAudioBuffer(&dmaAudioBuffer[TOTAL_BUFFER_SIZE / 2], NUMBER_OF_FRAMES_PER_HALF);
 }
 
-void feedSinewaveTable(int16_t* sinusLookupTable, uint16_t tableSize, uint16_t waveAmplitude) {
+void feedSinewaveTable(int16_t* sinusLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
 	for (uint16_t i = 0; i < tableSize; i++) {
 		sinusLookupTable[i] = (int16_t) (waveAmplitude * sin(i * PIPI / tableSize));
+	}
+}
+
+void feedTriangleTable(int16_t* triangleLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
+	// generate a lookup table for a triangle
+	//we slice one period of the triangle in three equations y = ax + b
+	// y --> tab[i]
+	// x --> i
+	// b --> wave_amplitude
+	// in each calculation, I have to do the multiplication first and then the division.
+	// if I do the division first, the decimal part will be lost early (because we use integers) and the error will "snowball" with the multiplication.
+	// This will lead to have bad values at the extremes points (or not really precise as we want).
+
+	const uint16_t quarterOfTheWave = tableSize >> 2;
+	const uint16_t halfOfTheWave = tableSize >> 1;
+	const uint16_t threeQuartersOfTheWave = quarterOfTheWave + halfOfTheWave;
+
+	for (uint16_t i = 0; i < tableSize; i++) {
+		if (i < quarterOfTheWave) {
+			triangleLookupTable[i] = (waveAmplitude * i) / (tableSize >> 2);
+		} else if (i < threeQuartersOfTheWave) {
+			triangleLookupTable[i] = - waveAmplitude * (i - quarterOfTheWave) / quarterOfTheWave + waveAmplitude;
+		} else {
+			triangleLookupTable[i] = waveAmplitude * (i - threeQuartersOfTheWave) / quarterOfTheWave- waveAmplitude;
+		}
 	}
 }
 
@@ -163,9 +188,6 @@ int main(void)
   /* USER CODE BEGIN 1 */
   enum waveform selectedWaveform;
   float wantedWaveFrequency = 0.0;
-  const int32_t quarterOfTheWave = SAMPLE_NUMBER_LUT >> 2;
-  const int32_t halfOfTheWave    = SAMPLE_NUMBER_LUT >> 1;
-  const int32_t threeQuartersOfTheWave = quarterOfTheWave + halfOfTheWave;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -197,26 +219,7 @@ int main(void)
   CS43_Start();
 
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
-
-  // generate a lookup table for a triangle
-  //we slice one period of the triangle in three equations y = ax + b
-  // y --> tab[i]
-  // x --> i
-  // b --> wave_amplitude
-  // in each calculation, I have to do the multiplication first and then the division.
-  // if I do the division first, the decimal part will be lost early (because we use integers) and the error will "snowball" with the multiplication.
-  // This will lead to have bad values at the extremes points (or not really precise as we want).
-  for(uint16_t i = 0; i < SAMPLE_NUMBER_LUT; i++){
-	  if (i < quarterOfTheWave){
-		  triangleLookupTable[i] = ((int32_t)WAVE_AMPLITUDE * i)/(SAMPLE_NUMBER_LUT >> 2);
-	  }
-	  else if(i < threeQuartersOfTheWave){
-		  triangleLookupTable[i] = -((int32_t)WAVE_AMPLITUDE * (i - quarterOfTheWave) ) / quarterOfTheWave + (int32_t)WAVE_AMPLITUDE;
-	  }
-	  else{
-		  triangleLookupTable[i] = (int32_t)WAVE_AMPLITUDE * (i - threeQuartersOfTheWave) / quarterOfTheWave - (int32_t)WAVE_AMPLITUDE;
-	  }
-  }
+  feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
 
   for(uint16_t i = 0; i < 1024; i++){
 	  printf("%d,\r\n", triangleLookupTable[i]);
