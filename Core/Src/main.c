@@ -49,7 +49,8 @@ float waveVolume = 0.0f;
 static enum waveform lastWaveformChosenByUser = NONE;
 uint32_t waveformPhase = 0;
 uint32_t waveformPhaseIncrement = 0;
-int16_t sinusLookupTable[SAMPLE_NUMBER_LUT];
+int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
+int16_t triangleLookupTable[SAMPLE_NUMBER_LUT];
 int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
 const char* waveformsAvailable[] = {
     "NONE\r\n",
@@ -113,7 +114,7 @@ uint32_t computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2
 
 void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	const float antipopFactor = 0.001;
-	for(int i = 0; i < num_frames; i++){
+	for(uint16_t i = 0; i < num_frames; i++){
 
 		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin) || HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin)){
 			if(waveVolume <= 1.0){
@@ -131,8 +132,8 @@ void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 				waveVolume = 0.0;
 			}
 		}
-		buffer[2*i] = sinusLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-		buffer[2*i+1] = sinusLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+		buffer[2*i] = sineLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+		buffer[2*i+1] = sineLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
         waveformPhase += waveformPhaseIncrement;
 	}
 }
@@ -146,7 +147,7 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
 }
 
 void feedSinewaveTable(int16_t* sinusLookupTable, uint16_t tableSize, uint16_t waveAmplitude) {
-	for (int i = 0; i < tableSize; i++) {
+	for (uint16_t i = 0; i < tableSize; i++) {
 		sinusLookupTable[i] = (int16_t) (waveAmplitude * sin(i * PIPI / tableSize));
 	}
 }
@@ -192,8 +193,31 @@ int main(void)
   CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
   CS43_Start();
 
-  // generate a lookup table for a sinus
-  feedSinewaveTable(sinusLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
+  feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
+
+  // generate a lookup table for a triangle
+  //we slice one period of the triangle in three equations y = ax + b
+  // y --> tab[i]
+  // x --> i
+  // b --> wave_amplitude
+  // in each calculation, I have to do the multiplication first and then the division.
+  // if I do the division first, the decimal part will be lost early (because we use integers) and the error will "snowball" with the multiplication.
+  // This will lead to have bad values at the extremes points (or not really precise as we want).
+  for(uint16_t i = 0; i < 1024; i++){
+	  if (i < 256){
+		  triangleLookupTable[i] = (WAVE_AMPLITUDE * i)/256;
+	  }
+	  else if(i < 768){
+		  triangleLookupTable[i] = -(WAVE_AMPLITUDE * (i-256))/256 + WAVE_AMPLITUDE;
+	  }
+	  else{
+		  triangleLookupTable[i] = (WAVE_AMPLITUDE * (i-768))/256 - WAVE_AMPLITUDE;
+	  }
+  }
+
+  for(uint16_t i = 0; i < 1024; i++){
+	  printf("%d,\r\n", triangleLookupTable[i]);
+  }
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
