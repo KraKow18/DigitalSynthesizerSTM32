@@ -145,6 +145,12 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s){
 	feedDMAAudioBuffer(&dmaAudioBuffer[TOTAL_BUFFER_SIZE / 2], NUMBER_OF_FRAMES_PER_HALF);
 }
 
+void feedSinewaveTable(int16_t* sinusLookupTable, uint16_t tableSize, uint16_t waveAmplitude) {
+	for (int i = 0; i < tableSize; i++) {
+		sinusLookupTable[i] = (int16_t) (waveAmplitude * sin(i * PIPI / tableSize));
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -187,9 +193,7 @@ int main(void)
   CS43_Start();
 
   // generate a lookup table for a sinus
-  for(int i = 0; i < SAMPLE_NUMBER_LUT; i++){
-		  sinusLookupTable[i] = (int16_t)(WAVE_AMPLITUDE * sin(i * PIPI / SAMPLE_NUMBER_LUT));
-  }
+  feedSinewaveTable(sinusLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
@@ -214,7 +218,6 @@ int main(void)
     	wantedWaveFrequency = 783.99;
     	waveformPhaseIncrement = computePhaseIncrement(wantedWaveFrequency, &hi2s3);
     }
-
   }
     /* USER CODE END WHILE */
 
