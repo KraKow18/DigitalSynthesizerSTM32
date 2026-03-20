@@ -85,19 +85,19 @@ int __io_putchar(int ch)
 
 enum waveform getUserWaveform(void)
 {
-    if (HAL_GPIO_ReadPin(GPIOD, bsinus_Pin))
+    if (HAL_GPIO_ReadPin(bsinus_GPIO_Port, bsinus_Pin))
     {
     	return SINUS;
     }
-    else if (HAL_GPIO_ReadPin(GPIOD, btriangle_Pin))
+    else if (HAL_GPIO_ReadPin(btriangle_GPIO_Port, btriangle_Pin))
     {
     	return TRIANGLE;
     }
-    else if (HAL_GPIO_ReadPin(GPIOD, bsaw_Pin))
+    else if (HAL_GPIO_ReadPin(bsaw_GPIO_Port, bsaw_Pin))
     {
     	return SAWTOOTH;
     }
-    else if (HAL_GPIO_ReadPin(GPIOD, bsquare_Pin))
+    else if (HAL_GPIO_ReadPin(bsquare_GPIO_Port, bsquare_Pin))
     {
     	return SQUARE;
     }
@@ -115,7 +115,7 @@ void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	const float antipopFactor = 0.001;
 	for(int i = 0; i < num_frames; i++){
 
-		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
+		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin) || HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin)){
 			if(waveVolume <= 1.0){
 				waveVolume += antipopFactor;
 			}
@@ -155,6 +155,7 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
   enum waveform selectedWaveform;
+  float wantedWaveFrequency = 0.0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -191,7 +192,6 @@ int main(void)
   }
 
   // define a phase increment with a given frequency
-  waveformPhaseIncrement = computePhaseIncrement(650, &hi2s3);
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
 
   /* USER CODE END 2 */
@@ -201,11 +201,20 @@ int main(void)
   while(1){
     selectedWaveform = getUserWaveform();
 
-    if (selectedWaveform != lastWaveformChosenByUser && selectedWaveform != NONE)
-    {
+    if (selectedWaveform != lastWaveformChosenByUser && selectedWaveform != NONE){
         lastWaveformChosenByUser = selectedWaveform;
         HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[selectedWaveform], strlen(waveformsAvailable[selectedWaveform]), 10);
     }
+
+    if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
+    	wantedWaveFrequency = 523.25;
+    	waveformPhaseIncrement = computePhaseIncrement(wantedWaveFrequency, &hi2s3);
+    }
+    else if(HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin)){
+    	wantedWaveFrequency = 783.99;
+    	waveformPhaseIncrement = computePhaseIncrement(wantedWaveFrequency, &hi2s3);
+    }
+
   }
     /* USER CODE END WHILE */
 
