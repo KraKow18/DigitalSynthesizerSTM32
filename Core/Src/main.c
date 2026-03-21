@@ -48,7 +48,7 @@ UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 float waveVolume = 0.0f;
-static enum waveform lastWaveformChosenByUser = NONE;
+static Waveform_t lastWaveformChosenByUser = NONE;
 uint32_t waveformPhase = 0;
 uint32_t waveformPhaseIncrement = 0;
 int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
@@ -74,8 +74,6 @@ static void MX_I2C1_Init(void);
 static void MX_I2S3_Init(void);
 /* USER CODE BEGIN PFP */
 
-enum waveform getUserWaveform(void);
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,7 +86,7 @@ int __io_putchar(int ch)
 	return ch;
 }
 
-enum waveform getUserWaveform(void)
+Waveform_t getUserWaveform(void)
 {
     if (HAL_GPIO_ReadPin(bsinus_GPIO_Port, bsinus_Pin))
     {
@@ -227,8 +225,8 @@ void feedSquareTable(int16_t* squareLookupTable, uint16_t tableSize, int32_t wav
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  enum waveform selectedWaveform;
-  float wantedWaveFrequency = 0.0;
+Waveform_t selectedWaveform;
+float wantedWaveFrequency = 0.0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/

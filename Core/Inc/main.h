@@ -36,7 +36,14 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-enum waveform {NONE, SINUS, TRIANGLE, SAWTOOTH, SQUARE};
+typedef enum {
+    NONE,
+    SINUS,
+    TRIANGLE,
+    SAWTOOTH,
+    SQUARE
+} Waveform_t;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
