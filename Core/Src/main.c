@@ -186,7 +186,19 @@ void feedTriangleTable(int16_t* triangleLookupTable, uint16_t tableSize, int32_t
 		} else if (i < threeQuartersOfTheWave) {
 			triangleLookupTable[i] = - waveAmplitude * (i - quarterOfTheWave) / quarterOfTheWave + waveAmplitude;
 		} else {
-			triangleLookupTable[i] = waveAmplitude * (i - threeQuartersOfTheWave) / quarterOfTheWave- waveAmplitude;
+			triangleLookupTable[i] = waveAmplitude * (i - threeQuartersOfTheWave) / quarterOfTheWave - waveAmplitude;
+		}
+	}
+}
+
+void feedSawtoothTable(int16_t* sawtoothLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
+	// generate sawtooth table
+	const uint16_t halfOfTheWave = tableSize >> 1;
+	for (uint16_t i = 0; i < tableSize; i++) {
+		if (i < halfOfTheWave) {
+			sawtoothLookupTable[i] = (waveAmplitude * i) / halfOfTheWave;
+		} else {
+			sawtoothLookupTable[i] = waveAmplitude * (i - halfOfTheWave) / halfOfTheWave- waveAmplitude;
 		}
 	}
 }
@@ -202,7 +214,6 @@ int main(void)
   /* USER CODE BEGIN 1 */
   enum waveform selectedWaveform;
   float wantedWaveFrequency = 0.0;
-  const uint16_t halfOfTheWave = SAMPLE_NUMBER_LUT >> 1;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -235,18 +246,7 @@ int main(void)
 
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
-
-  // generate sawtooth table
-  for(uint16_t i = 0; i < SAMPLE_NUMBER_LUT; i++){
-	  if(i  < halfOfTheWave){
-		  sawtoothLookupTable[i] = (WAVE_AMPLITUDE/halfOfTheWave)*i;
-	  }
-	  else{
-		  sawtoothLookupTable[i] = (WAVE_AMPLITUDE/halfOfTheWave)*(i-halfOfTheWave) - WAVE_AMPLITUDE;
-	  }
-	  printf("%d,\r\n", sawtoothLookupTable[i]);
-  }
-
+  feedSawtoothTable(sawtoothLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
