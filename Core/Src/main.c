@@ -202,6 +202,18 @@ void feedSawtoothTable(int16_t* sawtoothLookupTable, uint16_t tableSize, int32_t
 	}
 }
 
+void feedSquareTable(int16_t* squareLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
+	const uint16_t halfOfTheWave = tableSize >> 1;
+	for (uint16_t i = 0; i < halfOfTheWave; i++) {
+		if (i < halfOfTheWave) {
+			squareLookupTable[i] = waveAmplitude;
+		} else {
+			squareLookupTable[i] = -waveAmplitude;
+		}
+		printf("%d\r\n", squareLookupTable[i]);
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -246,16 +258,7 @@ int main(void)
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedSawtoothTable(sawtoothLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
-
-  const uint16_t halfOfTheWave = SAMPLE_NUMBER_LUT >> 1;
-  for(uint16_t i = 0; i < 1024; i++){
-	  if(i < halfOfTheWave){
-		  squareLookupTable[i] = WAVE_AMPLITUDE;
-	  }
-	  else{
-		  squareLookupTable[i] = -WAVE_AMPLITUDE;
-	  }
-  }
+  feedSquareTable(squareLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
