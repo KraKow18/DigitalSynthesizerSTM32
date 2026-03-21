@@ -125,9 +125,12 @@ void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	else if(lastWaveformChosenByUser == TRIANGLE){
 		activeLookupTable = triangleLookupTable;
 	}
-	else{
+	else if(lastWaveformChosenByUser == SAWTOOTH){
 		activeLookupTable = sawtoothLookupTable;
 	}
+	else{
+		activeLookupTable = squareLookupTable;
+	 }
 
 	for(uint16_t i = 0; i < num_frames; i++){
 
@@ -210,7 +213,6 @@ void feedSquareTable(int16_t* squareLookupTable, uint16_t tableSize, int32_t wav
 		} else {
 			squareLookupTable[i] = -waveAmplitude;
 		}
-		printf("%d\r\n", squareLookupTable[i]);
 	}
 }
 
