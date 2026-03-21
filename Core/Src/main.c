@@ -47,22 +47,9 @@ DMA_HandleTypeDef hdma_spi3_tx;
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
-float waveVolume = 0.0f;
-static Waveform_t lastWaveformChosenByUser = NONE;
-uint32_t waveformPhase = 0;
-uint32_t waveformPhaseIncrement = 0;
-int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
-int16_t triangleLookupTable[SAMPLE_NUMBER_LUT];
-int16_t sawtoothLookupTable[SAMPLE_NUMBER_LUT];
-int16_t squareLookupTable[SAMPLE_NUMBER_LUT];
-int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
-const char* waveformsAvailable[] = {
-    "NONE\r\n",
-    "SINUS\r\n",
-    "TRIANGLE\r\n",
-    "SAW\r\n",
-    "SQUARE\r\n"
-};
+static int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
+Oscillator_t osc1;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,45 +103,30 @@ uint32_t computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2
 
 void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	const float antipopFactor = 0.001;
-	int16_t* activeLookupTable;
 	uint8_t noteButtonPressed = HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin) || HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin);
 
-	 if(lastWaveformChosenByUser == SINUS){
-		 activeLookupTable = sineLookupTable;
-	 }
-	else if(lastWaveformChosenByUser == TRIANGLE){
-		activeLookupTable = triangleLookupTable;
-	}
-	else if(lastWaveformChosenByUser == SAWTOOTH){
-		activeLookupTable = sawtoothLookupTable;
-	}
-	else{
-		activeLookupTable = squareLookupTable;
-	 }
-
 	for(uint16_t i = 0; i < num_frames; i++){
-
 		if(noteButtonPressed){
-			if(waveVolume <= 1.0){
-				waveVolume += antipopFactor;
+			if(osc1.volume <= 1.0){
+				osc1.volume += antipopFactor;
 			}
 			else{
-				waveVolume = 1.0;
+				osc1.volume = 1.0;
 			}
 		}
 		else{
-			if(waveVolume > 0.0){
-				waveVolume -= antipopFactor;
+			if(osc1.volume > 0.0){
+				osc1.volume -= antipopFactor;
 			}
 			else{
-				waveVolume = 0.0;
+				osc1.volume = 0.0;
 			}
 		}
 
-		buffer[2*i] = activeLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-		buffer[2*i+1] = activeLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+		buffer[2*i] = osc1.activeLookupTable[osc1.phase >> FP_SHIFT_AMOUNT] * osc1.volume;
+		buffer[2*i+1] = osc1.activeLookupTable[osc1.phase >> FP_SHIFT_AMOUNT] * osc1.volume;
 
-        waveformPhase += waveformPhaseIncrement;
+		osc1.phase += osc1.phaseIncrement;
 	}
 }
 
@@ -225,8 +197,18 @@ void feedSquareTable(int16_t* squareLookupTable, uint16_t tableSize, int32_t wav
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-Waveform_t selectedWaveform;
-float wantedWaveFrequency = 0.0;
+  Waveform_t selectedWaveform;
+  const char* waveformsAvailable[] = {
+      "NONE\r\n",
+      "SINUS\r\n",
+      "TRIANGLE\r\n",
+      "SAW\r\n",
+      "SQUARE\r\n"
+  };
+  int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
+  int16_t triangleLookupTable[SAMPLE_NUMBER_LUT];
+  int16_t sawtoothLookupTable[SAMPLE_NUMBER_LUT];
+  int16_t squareLookupTable[SAMPLE_NUMBER_LUT];
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -257,12 +239,21 @@ float wantedWaveFrequency = 0.0;
   CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
   CS43_Start();
 
+  // create lookup table for the 4 waveforms
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedSawtoothTable(sawtoothLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedSquareTable(squareLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
 
-  // define a phase increment with a given frequency
+  // init oscillators
+  osc1.activeLookupTable = sineLookupTable;
+  osc1.detune = 0;
+  osc1.frequency = 0.0f;
+  osc1.phase = 0;
+  osc1.phaseIncrement = 0;
+  osc1.volume = 0.0f;
+  osc1.waveform = SINUS;
+
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
 
   /* USER CODE END 2 */
@@ -272,18 +263,31 @@ float wantedWaveFrequency = 0.0;
   while(1){
     selectedWaveform = getUserWaveform();
 
-    if (selectedWaveform != lastWaveformChosenByUser && selectedWaveform != NONE){
-        lastWaveformChosenByUser = selectedWaveform;
-        HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[selectedWaveform], strlen(waveformsAvailable[selectedWaveform]), 10);
+    if (selectedWaveform != osc1.waveform && selectedWaveform != NONE){
+    	osc1.waveform = selectedWaveform;
+        HAL_UART_Transmit(&huart4, (uint8_t*) waveformsAvailable[osc1.waveform], strlen(waveformsAvailable[osc1.waveform]), 10);
     }
 
+	 if(osc1.waveform == SINUS){
+		 osc1.activeLookupTable = sineLookupTable;
+	 }
+	else if(osc1.waveform == TRIANGLE){
+		osc1.activeLookupTable = triangleLookupTable;
+	}
+	else if(osc1.waveform == SAWTOOTH){
+		osc1.activeLookupTable = sawtoothLookupTable;
+	}
+	else{
+		osc1.activeLookupTable = squareLookupTable;
+	 }
+
     if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin)){
-    	wantedWaveFrequency = 523.25;
-    	waveformPhaseIncrement = computePhaseIncrement(wantedWaveFrequency, &hi2s3);
+    	osc1.frequency = 523.25;
+    	osc1.phaseIncrement = computePhaseIncrement(osc1.frequency, &hi2s3);
     }
     else if(HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin)){
-    	wantedWaveFrequency = 783.99;
-    	waveformPhaseIncrement = computePhaseIncrement(wantedWaveFrequency, &hi2s3);
+    	osc1.frequency = 783.99;
+    	osc1.phaseIncrement = computePhaseIncrement(osc1.frequency, &hi2s3);
     }
   }
     /* USER CODE END WHILE */

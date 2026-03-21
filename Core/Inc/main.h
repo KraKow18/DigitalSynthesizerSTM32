@@ -44,6 +44,16 @@ typedef enum {
     SQUARE
 } Waveform_t;
 
+typedef struct {
+    int16_t* activeLookupTable;
+    int8_t detune;
+    float frequency;
+    uint32_t phase;
+    uint32_t phaseIncrement;
+    float volume;
+    Waveform_t waveform;
+} Oscillator_t;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
