@@ -69,6 +69,8 @@ void Error_Handler(void);
 #define btriangle_GPIO_Port GPIOD
 #define bsaw_Pin GPIO_PIN_3
 #define bsaw_GPIO_Port GPIOD
+#define Audio_RST_Pin GPIO_PIN_4
+#define Audio_RST_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 

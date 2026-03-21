@@ -40,8 +40,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
 I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi3_tx;
+
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
@@ -207,7 +209,7 @@ void feedSawtoothTable(int16_t* sawtoothLookupTable, uint16_t tableSize, int32_t
 
 void feedSquareTable(int16_t* squareLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
 	const uint16_t halfOfTheWave = tableSize >> 1;
-	for (uint16_t i = 0; i < halfOfTheWave; i++) {
+	for (uint16_t i = 0; i < tableSize; i++) {
 		if (i < halfOfTheWave) {
 			squareLookupTable[i] = waveAmplitude;
 		} else {
@@ -253,7 +255,7 @@ int main(void)
 
   // Configure CS43 audio chip
   CS43_Init(hi2c1, MODE_I2S);
-  CS43_SetVolume(0);
+  CS43_SetVolume(1);
   CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
   CS43_Start();
 
@@ -474,7 +476,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Audio_RST_GPIO_Port, Audio_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : bLowerOctave_Pin bUpperOctave_Pin bsquare_Pin bsinus_Pin
                            btriangle_Pin bsaw_Pin */
@@ -484,12 +486,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PD4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  /*Configure GPIO pin : Audio_RST_Pin */
+  GPIO_InitStruct.Pin = Audio_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+  HAL_GPIO_Init(Audio_RST_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
