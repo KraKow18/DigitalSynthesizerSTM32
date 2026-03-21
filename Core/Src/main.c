@@ -28,7 +28,7 @@
 #define TOTAL_BUFFER_SIZE (NUMBER_OF_FRAMES_PER_HALF * 2 * 2) // 32 frames * 2 (L/R) * 2 (halves) = 128 values
 #define WAVE_AMPLITUDE 16000
 #define PIPI 6.2831853
-#define LUT_BITS 10
+#define LUT_BITS 12
 #define SAMPLE_NUMBER_LUT (1 << LUT_BITS) // can hear a small harmonic distortion for value < 4096 => maybe something to improve
 #define FP_SHIFT_AMOUNT (32 - LUT_BITS)
 /* USER CODE END PD */
@@ -52,6 +52,7 @@ uint32_t waveformPhaseIncrement = 0;
 int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
 int16_t triangleLookupTable[SAMPLE_NUMBER_LUT];
 int16_t sawtoothLookupTable[SAMPLE_NUMBER_LUT];
+int16_t squareLookupTable[SAMPLE_NUMBER_LUT];
 int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
 const char* waveformsAvailable[] = {
     "NONE\r\n",
@@ -245,6 +246,16 @@ int main(void)
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedSawtoothTable(sawtoothLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
+
+  const uint16_t halfOfTheWave = SAMPLE_NUMBER_LUT >> 1;
+  for(uint16_t i = 0; i < 1024; i++){
+	  if(i < halfOfTheWave){
+		  squareLookupTable[i] = WAVE_AMPLITUDE;
+	  }
+	  else{
+		  squareLookupTable[i] = -WAVE_AMPLITUDE;
+	  }
+  }
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
