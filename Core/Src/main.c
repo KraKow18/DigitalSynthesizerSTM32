@@ -29,7 +29,7 @@
 #define WAVE_AMPLITUDE 16000
 #define PIPI 6.2831853
 #define LUT_BITS 10
-#define SAMPLE_NUMBER_LUT (1 << LUT_BITS) // can hear a small harmonic distortion for value < 4096 => something to improve
+#define SAMPLE_NUMBER_LUT (1 << LUT_BITS) // can hear a small harmonic distortion for value < 4096 => maybe something to improve
 #define FP_SHIFT_AMOUNT (32 - LUT_BITS)
 /* USER CODE END PD */
 
@@ -173,6 +173,7 @@ void feedTriangleTable(int16_t* triangleLookupTable, uint16_t tableSize, int32_t
 	// in each calculation, I have to do the multiplication first and then the division.
 	// if I do the division first, the decimal part will be lost early (because we use integers) and the error will "snowball" with the multiplication.
 	// This will lead to have bad values at the extremes points (or not really precise as we want).
+	// Bit shifting is used to avoid some divisions.
 
 	const uint16_t quarterOfTheWave = tableSize >> 2;
 	const uint16_t halfOfTheWave = tableSize >> 1;
@@ -180,7 +181,7 @@ void feedTriangleTable(int16_t* triangleLookupTable, uint16_t tableSize, int32_t
 
 	for (uint16_t i = 0; i < tableSize; i++) {
 		if (i < quarterOfTheWave) {
-			triangleLookupTable[i] = (waveAmplitude * i) / (tableSize >> 2);
+			triangleLookupTable[i] = (waveAmplitude * i) / quarterOfTheWave;
 		} else if (i < threeQuartersOfTheWave) {
 			triangleLookupTable[i] = - waveAmplitude * (i - quarterOfTheWave) / quarterOfTheWave + waveAmplitude;
 		} else {
