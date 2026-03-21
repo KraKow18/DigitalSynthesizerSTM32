@@ -121,8 +121,11 @@ void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	 if(lastWaveformChosenByUser == SINUS){
 		 activeLookupTable = sineLookupTable;
 	 }
-	else{
+	else if(lastWaveformChosenByUser == TRIANGLE){
 		activeLookupTable = triangleLookupTable;
+	}
+	else{
+		activeLookupTable = sawtoothLookupTable;
 	}
 
 	for(uint16_t i = 0; i < num_frames; i++){
@@ -193,13 +196,8 @@ void feedTriangleTable(int16_t* triangleLookupTable, uint16_t tableSize, int32_t
 
 void feedSawtoothTable(int16_t* sawtoothLookupTable, uint16_t tableSize, int32_t waveAmplitude) {
 	// generate sawtooth table
-	const uint16_t halfOfTheWave = tableSize >> 1;
 	for (uint16_t i = 0; i < tableSize; i++) {
-		if (i < halfOfTheWave) {
-			sawtoothLookupTable[i] = (waveAmplitude * i) / halfOfTheWave;
-		} else {
-			sawtoothLookupTable[i] = waveAmplitude * (i - halfOfTheWave) / halfOfTheWave- waveAmplitude;
-		}
+		sawtoothLookupTable[i] = (2 * waveAmplitude * i) / tableSize - waveAmplitude;
 	}
 }
 
@@ -240,7 +238,7 @@ int main(void)
 
   // Configure CS43 audio chip
   CS43_Init(hi2c1, MODE_I2S);
-  CS43_SetVolume(3);
+  CS43_SetVolume(0);
   CS43_Enable_RightLeft(CS43_RIGHT_LEFT);
   CS43_Start();
 
