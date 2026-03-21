@@ -51,6 +51,7 @@ uint32_t waveformPhase = 0;
 uint32_t waveformPhaseIncrement = 0;
 int16_t sineLookupTable[SAMPLE_NUMBER_LUT];
 int16_t triangleLookupTable[SAMPLE_NUMBER_LUT];
+int16_t sawtoothLookupTable[SAMPLE_NUMBER_LUT];
 int16_t dmaAudioBuffer[TOTAL_BUFFER_SIZE]; // double buffering --> we modify one half while the other half is being processed by the DMA (= automatically enable circucal mode)
 const char* waveformsAvailable[] = {
     "NONE\r\n",
@@ -201,6 +202,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
   enum waveform selectedWaveform;
   float wantedWaveFrequency = 0.0;
+  const uint16_t halfOfTheWave = SAMPLE_NUMBER_LUT >> 1;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -233,6 +235,18 @@ int main(void)
 
   feedSinewaveTable(sineLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
   feedTriangleTable(triangleLookupTable, SAMPLE_NUMBER_LUT, WAVE_AMPLITUDE);
+
+  // generate sawtooth table
+  for(uint16_t i = 0; i < SAMPLE_NUMBER_LUT; i++){
+	  if(i  < halfOfTheWave){
+		  sawtoothLookupTable[i] = (WAVE_AMPLITUDE/halfOfTheWave)*i;
+	  }
+	  else{
+		  sawtoothLookupTable[i] = (WAVE_AMPLITUDE/halfOfTheWave)*(i-halfOfTheWave) - WAVE_AMPLITUDE;
+	  }
+	  printf("%d,\r\n", sawtoothLookupTable[i]);
+  }
+
 
   // define a phase increment with a given frequency
   HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*) &dmaAudioBuffer, TOTAL_BUFFER_SIZE);
