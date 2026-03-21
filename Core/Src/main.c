@@ -114,9 +114,19 @@ uint32_t computePhaseIncrement(float wantedWaveFrequency, I2S_HandleTypeDef *hi2
 
 void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 	const float antipopFactor = 0.001;
+	int16_t* activeLookupTable;
+	uint8_t noteButtonPressed = HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin) || HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin);
+
+	 if(lastWaveformChosenByUser == SINUS){
+		 activeLookupTable = sineLookupTable;
+	 }
+	else{
+		activeLookupTable = triangleLookupTable;
+	}
+
 	for(uint16_t i = 0; i < num_frames; i++){
 
-		if(HAL_GPIO_ReadPin(bLowerOctave_GPIO_Port, bLowerOctave_Pin) || HAL_GPIO_ReadPin(bUpperOctave_GPIO_Port, bUpperOctave_Pin)){
+		if(noteButtonPressed){
 			if(waveVolume <= 1.0){
 				waveVolume += antipopFactor;
 			}
@@ -132,14 +142,9 @@ void feedDMAAudioBuffer(int16_t *buffer, uint16_t num_frames){
 				waveVolume = 0.0;
 			}
 		}
-		if(lastWaveformChosenByUser == SINUS){
-			buffer[2*i] = sineLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-			buffer[2*i+1] = sineLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-		}
-		else if(lastWaveformChosenByUser == TRIANGLE){
-			buffer[2*i] = triangleLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-			buffer[2*i+1] = triangleLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
-		}
+
+		buffer[2*i] = activeLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
+		buffer[2*i+1] = activeLookupTable[waveformPhase >> FP_SHIFT_AMOUNT] * waveVolume;
 
         waveformPhase += waveformPhaseIncrement;
 	}
